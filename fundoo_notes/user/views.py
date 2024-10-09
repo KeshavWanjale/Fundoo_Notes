@@ -1,81 +1,60 @@
-from django.shortcuts import render
-from django.http import JsonResponse
-from django.views.decorators.csrf import csrf_exempt
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from rest_framework import status
 from django.contrib.auth import authenticate
-import json
 
-from .models import CustomUser
-from .utils import *
+from .serializer import *
 
 # Create your views here.
 
-@csrf_exempt
-def register_user(request):
+
+class RegisterUser(APIView):
     """
     Description:
-    Handles user registration by creating a new user account with a valid email, username, and password. 
-    Validates input data and returns appropriate responses for missing or invalid data.
-    Parameters:
-    request (HttpRequest): The HTTP request object containing POST data with 'email', 'username', and 'password'.
+        API view to handle user registration. Receives user data via POST 
+        request, validates it using `UserRegistrationSerializer`, and creates 
+        a new user if validation is successful.
+    Parameter:
+        request (Request): The request object containing user registration data.
     Returns:
-    JsonResponse: A JSON response indicating success or failure of user registration.
+        Response: A response with a success message and user data if 
+        registration is successful, or an error message with validation errors.
     """
-    if request.method == "POST":
-        try:
-            data = json.loads(request.body)
-            email = data.get('email')
-            password = data.get('password')
-            username = data.get('username')
-            if not all([email, password, username]):
-                return JsonResponse({"error": "Missing fields"}, status=400)
-            if CustomUser.objects.filter(email=email).exists():
-                return JsonResponse({"error": "Email already in use"}, status=400)
-            if not validate_username(username):
-                return JsonResponse({"error": "Invalid Username format"}, status=400)
-            if not validate_email(email):
-                return JsonResponse({"error": "Invalid Email format"}, status=400)
-            if not validate_password(password):
-                return JsonResponse({"error": "Invalid Password format"}, status=400)
-            user = CustomUser.objects.create_user(
-                email=email,
-                username=username,
-                password=password
-            )
-            return JsonResponse({"message": "User registered successfully!", "status": "success", "data": {"email": email, "username": username}}, status=201)
-        except:
-            return JsonResponse({"messege": "Unexpected error occured.", "status": "error"}, status ="error")
-    else:
-        return JsonResponse({"error": "Only POST request is allowed"}, status=405)
+    def post(self,request):
+
+        serializer = UserRegistrationSerializer(data=request.data)
+        if serializer.is_valid():
+            serializer.save()
+            return Response({"message": "User registered successfully!", "data": serializer.data}, status=status.HTTP_201_CREATED)
+        
+        return Response({"error": serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
+    
 
 
-@csrf_exempt
-def login_user(request):
+class LoginUser(APIView):
     """
     Description:
-    Handles user login by authenticating the user with the provided email and password. 
-    Returns success if the user credentials are valid, otherwise an error message.
-    Parameters:
-    request (HttpRequest): The HTTP request object containing POST data with 'email' and 'password'.
+        API view to handle user login. Receives email and password via POST 
+        request, validates them using `UserLoginSerializer`, and authenticates 
+        the user.
+    Parameter:
+        request (Request): The request object containing user login credentials.
     Returns:
-    JsonResponse: A JSON response indicating success or failure of user login.
+        Response: A response with a success message if login is successful, or 
+        an error message for invalid credentials or validation errors.
     """
-    if request.method == "POST":
-        try:
-            body = json.loads(request.body)
-            email = body.get('email')
-            password = body.get('password')
+    def post(self,request):
 
-            if not email or not password:
-                return JsonResponse({"error": "Email and password are required"}, status=400)
-            
+        serializer = UserLoginSerializer(data=request.data)
+        if serializer.is_valid():
+            email = serializer.validated_data['email']
+            password = serializer.validated_data['password']
             user = authenticate(email=email, password=password)
 
             if user is not None:
-                return JsonResponse({"message": "Login successful!"}, status=200)
-            else:
-                return JsonResponse({"error": "Invalid email or password"}, status=400)
+                return Response({"message": "Login successful!"}, status=status.HTTP_200_OK)
+            return Response({"error": "Invalid email or password"}, status=status.HTTP_400_BAD_REQUEST)
+        
+        return Response({"error": serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
+    
 
-        except:
-            return JsonResponse({"messege": "Unexpected error occured.", "status": "error"}, status ="error")
-    else:
-        return JsonResponse({"error": "Only POST request is allowed"}, status=405)
