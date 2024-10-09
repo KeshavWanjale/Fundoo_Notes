@@ -11,7 +11,7 @@ def validate_username(username):
     Returns:
         bool: Returns True if the username is valid, otherwise False.
     """
-    pattern = re.compile(r"^[A-Z][a-zA-Z]{2,}(?:\s[A-Z][a-zA-Z]*)?(?:\s[A-Z][a-zA-Z]*)?$")
+    pattern = re.compile(r"^[A-Z][a-zA-Z]{2,}(?:\s[A-Z][a-zA-Z]+){0,2}$")
 
     if pattern.match(username) :
         return True
