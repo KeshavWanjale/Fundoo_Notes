@@ -27,7 +27,7 @@ class RegisterUser(APIView):
             serializer.save()
             return Response({"message": "User registered successfully!", "status": "success", "data": serializer.data}, status=status.HTTP_201_CREATED)
         
-        return Response({"message": "Unexpected error occured", "status": f"error - {serializer.errors}"}, status=status.HTTP_400_BAD_REQUEST)
+        return Response({"message": "Unexpected error occured", "status": "error", "error": serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
     
 
 
@@ -55,6 +55,6 @@ class LoginUser(APIView):
                 return Response({"message": "Login successful!", "status": "success", "data": serializer.data}, status=status.HTTP_200_OK)
             return Response({"message": "Unexpected error occured", "error": "Invalid email or password"}, status=status.HTTP_400_BAD_REQUEST)
         
-        return Response({"message": "Unexpected error occured", "status": f"error - {serializer.errors}"}, status=status.HTTP_400_BAD_REQUEST)
+        return Response({"message": "Unexpected error occured", "status": "error", "error": serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
     
 
