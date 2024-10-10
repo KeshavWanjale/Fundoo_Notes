@@ -25,9 +25,9 @@ class RegisterUser(APIView):
         serializer = UserRegistrationSerializer(data=request.data)
         if serializer.is_valid():
             serializer.save()
-            return Response({"message": "User registered successfully!", "data": serializer.data}, status=status.HTTP_201_CREATED)
+            return Response({"message": "User registered successfully!", "status": "success", "data": serializer.data}, status=status.HTTP_201_CREATED)
         
-        return Response({"error": serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
+        return Response({"message": "Unexpected error occured", "status": f"error - {serializer.errors}"}, status=status.HTTP_400_BAD_REQUEST)
     
 
 
@@ -52,9 +52,9 @@ class LoginUser(APIView):
             user = authenticate(email=email, password=password)
 
             if user is not None:
-                return Response({"message": "Login successful!"}, status=status.HTTP_200_OK)
-            return Response({"error": "Invalid email or password"}, status=status.HTTP_400_BAD_REQUEST)
+                return Response({"message": "Login successful!", "status": "success", "data": serializer.data}, status=status.HTTP_200_OK)
+            return Response({"message": "Unexpected error occured", "error": "Invalid email or password"}, status=status.HTTP_400_BAD_REQUEST)
         
-        return Response({"error": serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
+        return Response({"message": "Unexpected error occured", "status": f"error - {serializer.errors}"}, status=status.HTTP_400_BAD_REQUEST)
     
 
