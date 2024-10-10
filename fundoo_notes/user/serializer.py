@@ -15,13 +15,13 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
         A CustomUser instance created with the validated data.
     """
 
-    username = serializers.CharField(validators=[])
+    # username = serializers.CharField(validators=[]) # dont need to override default validation for username
     # This defines a username field as a CharField (string field) but overrides the default validation by passing 
     # an empty list to validators, meaning no default validation is applied.
 
     class Meta:
         model = CustomUser
-        fields = ["email", "username", "password"]
+        fields = ["id","email", "username", "password"]
         extra_kwargs = {
             'password': {'write_only': True}
         }
