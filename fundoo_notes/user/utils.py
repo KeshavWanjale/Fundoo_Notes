@@ -2,16 +2,15 @@ import re
 def validate_username(username):
     """
     Description:
-        Validates that the given username starts with an uppercase letter,
-        followed by at least two alphabetic characters. It optionally allows
-        for one or two additional parts (like middle or last names), where each
-        part must also start with an uppercase letter followed by alphabetic characters.
+        Validates the user name based on specific rules:
+        - The first name must start with a capital letter.
+        - The first name must have a minimum of 3 characters.
     Parameters:
-        first_name (str): The username string to validate.
-    Returns:
-        bool: Returns True if the username is valid, otherwise False.
+        username (str): The user name to be validated.
+    Return:
+        bool: Returns True if the user name is valid, otherwise False.
     """
-    pattern = re.compile(r"^[A-Z][a-zA-Z]{2,}(?:\s[A-Z][a-zA-Z]+){0,2}$")
+    pattern = re.compile(r"^[A-Z][a-zA-Z]{2,}$")
 
     if pattern.match(username) :
         return True
