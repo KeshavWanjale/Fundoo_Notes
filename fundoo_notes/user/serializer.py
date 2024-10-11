@@ -14,11 +14,6 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
     Returns:
         A CustomUser instance created with the validated data.
     """
-
-    # username = serializers.CharField(validators=[]) # dont need to override default validation for username
-    # This defines a username field as a CharField (string field) but overrides the default validation by passing 
-    # an empty list to validators, meaning no default validation is applied.
-
     class Meta:
         model = CustomUser
         fields = ["id","email", "username", "password"]
@@ -35,7 +30,6 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
         Returns:
             dict: Validated data for user registration.
         """
-
         email = data.get("email")
         username = data.get("username")
         password = data.get("password")
@@ -58,7 +52,6 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
         Returns:
             CustomUser: A newly created user instance.
         """
-
         user = CustomUser.objects.create_user(
             email=validated_data['email'],
             username=validated_data['username'],
@@ -76,7 +69,7 @@ class UserLoginSerializer(serializers.Serializer):
         password (CharField): The password of the user attempting to log in.
     Returns:
         dict: Validated data containing email and password for user login.
-    """
+    """   
     email = serializers.EmailField()
     password = serializers.CharField(write_only=True)
 
