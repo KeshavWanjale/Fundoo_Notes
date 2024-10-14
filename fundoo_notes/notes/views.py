@@ -38,13 +38,13 @@ class NoteViewSet(ViewSet):
 
         try: 
             serializer = NoteSerializer(data=request.data)
-            if serializer.is_valid():
-                serializer.save(user=request.user)
-                return Response({
-                    "message": "Successfully created note for user.",
-                    "status": "success", 
-                    "data": serializer.data
-                }, status=status.HTTP_201_CREATED)
+            serializer.is_valid(raise_exception= True)
+            serializer.save(user=request.user)
+            return Response({
+                "message": "Successfully created note for user.",
+                "status": "success", 
+                "data": serializer.data
+            }, status=status.HTTP_201_CREATED)
             
         except:
             return Response({
@@ -56,6 +56,7 @@ class NoteViewSet(ViewSet):
 
     def retrieve(self, request, pk=None):
         # GET: Retrieve a single note by its ID
+
         try:
             note = Note.objects.get(pk=pk, user=request.user)
             serializer = NoteSerializer(note)
@@ -76,12 +77,16 @@ class NoteViewSet(ViewSet):
 
     def update(self, request, pk=None):
         # PUT: Update an existing note
+
         try:
             note = Note.objects.get(pk=pk, user=request.user)
             serializer = NoteSerializer(note, data=request.data, partial=True)
             if serializer.is_valid():
                 serializer.save()
-                return Response(serializer.data)
+                return Response({
+                "message": "Note Updates Successfully", 
+                "status": "success", 
+            }, status=status.HTTP_200_OK)
             return Response({
                 "message": "Unexpected error occured", 
                 "status": "error", 
@@ -97,6 +102,7 @@ class NoteViewSet(ViewSet):
         
     def destroy(self, request, pk=None):
         # DELETE: Delete an existing note
+        
         try:
             note = Note.objects.get(pk=pk, user=request.user)
             note.delete()
