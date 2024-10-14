@@ -10,7 +10,9 @@ from rest_framework.reverse import reverse
 from django.core.mail import send_mail
 from django.conf import settings
 
+from rest_framework.permissions import AllowAny
 
+permission_classes = [AllowAny]  # Allow unauthenticated access
 @api_view(['GET'])
 def verify_registered_user(request, token):
     """
@@ -61,6 +63,7 @@ class RegisterUser(APIView):
             - On failure: A response with an error message detailing validation issues or 
               other errors. Status code 400.
     """
+    permission_classes = [AllowAny]  # Allow unauthenticated access
     def post(self,request):
 
         serializer = UserRegistrationSerializer(data=request.data)
@@ -110,6 +113,7 @@ class LoginUser(APIView):
             - On failure: A response with an error message for invalid credentials 
               or validation errors.
     """
+    permission_classes = [AllowAny]  # Allow unauthenticated access
     def post(self,request):
 
         serializer = UserLoginSerializer(data=request.data)
