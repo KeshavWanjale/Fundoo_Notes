@@ -15,6 +15,7 @@ from pathlib import Path
 import os
 from dotenv import load_dotenv
 from pathlib import Path
+from datetime import timedelta
 
 # Load environment variables from .env file
 load_dotenv()
@@ -157,3 +158,38 @@ REST_FRAMEWORK = {
         'rest_framework.permissions.IsAuthenticated',
     ],
 }
+
+SIMPLE_JWT = {
+    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=60),
+    'SLIDING_TOKEN_REFRESH_LIFETIME': timedelta(days=1),
+    'SLIDING_TOKEN_LIFETIME': timedelta(days=30),
+    'SLIDING_TOKEN_REFRESH_LIFETIME_LATE_USER': timedelta(days=1),
+    'SLIDING_TOKEN_LIFETIME_LATE_USER': timedelta(days=30),
+}
+
+
+
+from loguru import logger
+
+# Define your base directory and log directory
+BASE_DIR = Path(__file__).parent
+LOG_DIR = BASE_DIR / 'logs'
+os.makedirs(LOG_DIR, exist_ok=True)
+
+# Define the settings for Loguru
+LOGURU_SETTINGS = {
+    "handlers": [
+        {
+            "sink": LOG_DIR / "all_logs.log",
+            "level": "TRACE",  # This will capture all log levels from TRACE to CRITICAL
+            "format": "{time} - {level} - {message}",
+            "rotation": "10 MB",
+            "compression": "zip",
+            "serialize": False
+        },
+    ],
+}
+
+# Apply the Loguru settings
+for handler in LOGURU_SETTINGS["handlers"]:
+    logger.add(**handler)
