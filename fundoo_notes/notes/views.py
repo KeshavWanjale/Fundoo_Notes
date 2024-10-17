@@ -5,9 +5,11 @@ from rest_framework.response import Response
 from .models import Note
 from .serializer import NoteSerializer
 from rest_framework_simplejwt.authentication import JWTAuthentication
+from django.core.exceptions import ValidationError
 
 from rest_framework.decorators import action
 from loguru import logger
+from notes.utils.redis_utils import RedisUtils
 
 
 class NoteViewSet(ViewSet):
@@ -25,24 +27,39 @@ class NoteViewSet(ViewSet):
     permission_classes = [IsAuthenticated] 
     authentication_classes = [JWTAuthentication]
 
+
     def list(self, request):
         """
         Description:
-            Fetch all non-archived, non-trashed notes for the authenticated user.
+            Fetch all active (non-archived, non-trashed) notes for the authenticated user.
+            This method checks if the user's notes are available in the Redis cache. If so, it returns 
+            the cached data. Otherwise, it fetches the data from the database, caches it, and returns it.
         Parameter:
             request (Request): The request object from the authenticated user.
         Returns:
-            Response: A response with a list of notes and a success message.
+            Response: A response with the list of notes, fetched either from the cache or the database.
         """
         try:
+            # Check if data exists in cache
+            cache_key = RedisUtils.get_cache_key(request.user.id)
+            cached_notes = RedisUtils.get(cache_key)
+
+            if cached_notes:
+                logger.info("Returning notes from cache.")
+                return Response({
+                    "message": "Successfully fetched notes for user from cache.",
+                    "status": "success", 
+                    "data": cached_notes
+                }, status=status.HTTP_200_OK)
+
             notes = Note.objects.filter(user=request.user, is_archive=False, is_trash=False)
             serializer = NoteSerializer(notes, many=True)
-
-            logger.info("Successfully fetched notes for user.")
+            RedisUtils.save(cache_key, serializer.data)  # Cache the notes data
+            logger.info("Successfully fetched notes from DB and saved to cache.")
             return Response({
-                "message": "Successfully fetched notes for user.", 
-                "status": "success", 
-                "data": serializer.data
+                "message": "Successfully fetched notes for user from DB.", 
+                "status": "success",
+                "data": serializer.data 
             }, status=status.HTTP_200_OK)
         
         except Exception as e:
@@ -56,24 +73,42 @@ class NoteViewSet(ViewSet):
     def create(self, request):
         """
         Description:
-            Create a new note for the authenticated user.
+            Create a new note for the authenticated user. Upon successful creation, 
+            the new note is appended to the cached notes in Redis for the user.
         Parameter:
-            request (Request): The request object containing the note data to be created.
+            request (Request): The request object containing the note data.
         Returns:
             Response: A response with the created note data and a success message.
         """
         try:
             serializer = NoteSerializer(data=request.data)
             serializer.is_valid(raise_exception=True)
-            serializer.save(user=request.user)
+            note = serializer.save(user=request.user)
 
-            logger.info("Successfully created note for user.")
+            cache_key = RedisUtils.get_cache_key(request.user.id)
+            # Cache the note immediately after creation
+            cached_notes = RedisUtils.get(cache_key) or []
+            # Append the newly created note to the cached notes
+            cached_notes.append(NoteSerializer(note).data)  # Serialize the newly created note
+            
+            # Save the updated notes list back to the cache
+            RedisUtils.save(cache_key, cached_notes)
+
+
+            logger.info("Successfully created and cached note for user.")
             return Response({
-                "message": "Successfully created note for user.",
+                "message": "Successfully created note for user and stored in cache.",
                 "status": "success", 
                 "data": serializer.data
             }, status=status.HTTP_201_CREATED)
-        
+        except ValidationError as e:
+            # Catch validation errors and return them in the response
+            logger.error(f"Validation error occurred: {e}")
+            return Response({
+                "message": "Validation error occurred",
+                "status": "error", 
+                "error": serializer.errors if serializer else str(e)  # Use serializer errors if they exist
+            }, status=status.HTTP_400_BAD_REQUEST)
         except Exception as e:
             logger.error(f"Unexpected error occurred: {serializer.errors}")
             return Response({
@@ -114,10 +149,11 @@ class NoteViewSet(ViewSet):
     def update(self, request, pk=None):
         """
         Description:
-            Update a specific note by its primary key for the authenticated user.
-        Parameter:
+            Update an existing note for the authenticated user by its primary key (ID). 
+            After updating, the cached note list is updated with the modified note.
+        Parameters:
             request (Request): The request object containing the updated note data.
-            pk (int): The primary key of the note to be updated.
+            pk (int): The primary key of the note to update.
         Returns:
             Response: A response with a success message after updating the note.
         """
@@ -127,10 +163,22 @@ class NoteViewSet(ViewSet):
             if serializer.is_valid():
                 serializer.save()
 
-                logger.info("Note updated successfully.")
+                cache_key = RedisUtils.get_cache_key(request.user.id)
+                cached_notes = RedisUtils.get(cache_key) or []
+
+                for cached_note in cached_notes:
+                    if cached_note['id'] == note.id:
+                        # Update the note directly in the list
+                        cached_note.update(serializer.data)
+                        break
+                
+                RedisUtils.save(cache_key, cached_notes)  # Update cache with modified notes
+
+                logger.info("Note updated successfully and cache updated.")
                 return Response({
                     "message": "Note updated successfully.", 
-                    "status": "success", 
+                    "status": "success",
+                    "data": serializer.data 
                 }, status=status.HTTP_200_OK)
             
             logger.error(f"Unexpected error occurred: {serializer.errors}")
@@ -151,18 +199,30 @@ class NoteViewSet(ViewSet):
     def destroy(self, request, pk=None):
         """
         Description:
-            Delete a specific note by its primary key for the authenticated user.
-        Parameter:
-            request (Request): The request object from the authenticated user.
-            pk (int): The primary key of the note to be deleted.
+            Delete a note for the authenticated user by its primary key (ID). After deletion, 
+            the cached notes are updated to remove the deleted note.
+        Parameters:
+            request (Request): The request object.
+            pk (int): The primary key of the note to delete.
         Returns:
-            Response: A response with a success message after deleting the note.
+            Response: A response confirming the successful deletion of the note.
         """
         try:
             note = Note.objects.get(pk=pk, user=request.user)
+            note_id = note.id
             note.delete()
 
-            logger.info("Note deleted successfully.")
+            cache_key = RedisUtils.get_cache_key(request.user.id)
+            cached_notes = RedisUtils.get(cache_key) or []
+            
+            # Filter out the deleted note from the cached notes
+            cached_notes = [n for n in cached_notes if n['id'] != note_id]
+
+            # Save the updated cache
+            RedisUtils.save(cache_key, cached_notes)
+
+            logger.info("Note deleted successfully and cache updated.")
+
             return Response({
                 "message": "Note deleted successfully.",
                 "status": "success"
