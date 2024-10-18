@@ -52,6 +52,8 @@ INSTALLED_APPS = [
 
     'notes',
     'labels',
+
+    'django_celery_results',
 ]
 
 MIDDLEWARE = [
@@ -205,3 +207,11 @@ CACHES = {
         }
     }
 }
+
+# CELERY SETTINGS
+CELERY_BROKER_URL = os.getenv('CELERY_BROKER_URL')
+CELERY_RESULT_BACKEND = os.getenv('CELERY_RESULT_BACKEND')
+CELERY_ACCEPT_CONTENT = ['application/json']
+CELERY_RESULT_SERIALIZER = os.getenv('CELERY_RESULT_SERIALIZER') 
+CELERY_TASK_SERIALIZER = os.getenv('CELERY_TASK_SERIALIZER')
+CELERY_TIMEZONE = os.getenv('CELERY_TIMEZONE')
