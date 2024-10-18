@@ -5,15 +5,16 @@ from django.contrib.auth import authenticate
 
 from .serializer import *
 from rest_framework_simplejwt.tokens import RefreshToken, AccessToken
-from rest_framework.decorators import api_view
+from rest_framework.decorators import api_view, permission_classes
 from rest_framework.reverse import reverse
-from django.core.mail import send_mail
-from django.conf import settings
+
+
+from .tasks import send_verification_mail
 
 from rest_framework.permissions import AllowAny
 
-permission_classes = [AllowAny]  # Allow unauthenticated access
 @api_view(['GET'])
+@permission_classes([AllowAny]) # Allow unauthenticated access
 def verify_registered_user(request, token):
     """
     Description:
@@ -53,7 +54,7 @@ class RegisterUser(APIView):
     Description:
         API view to handle user registration. Registers a user using the data provided 
         in the POST request, generates a verification JWT token, and sends a verification 
-        email with a link to verify the user's account.
+        email(using celery) with a link to verify the user's account.
     Parameter:
         request (Request): The request object containing user registration data.
     Returns:
@@ -84,7 +85,7 @@ class RegisterUser(APIView):
             message = f'Hi {user.username},\n\nPlease verify your account using the link below:\n{verification_url}'
             recipient_list = [user.email]
               
-            send_mail(subject, message, settings.DEFAULT_FROM_EMAIL, recipient_list)
+            send_verification_mail.delay(subject, message, recipient_list)
 
             return Response({
                 "message": "User registered successfully! Please verify your email.",
