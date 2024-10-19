@@ -11,6 +11,8 @@ from rest_framework.decorators import action
 from loguru import logger
 from notes.utils.redis_utils import RedisUtils
 
+from .schedule import schedule_reminder
+
 
 class NoteViewSet(ViewSet):
     """
@@ -85,13 +87,12 @@ class NoteViewSet(ViewSet):
             serializer.is_valid(raise_exception=True)
             note = serializer.save(user=request.user)
 
+            if note.reminder:
+                schedule_reminder(note)
+
             cache_key = RedisUtils.get_cache_key(request.user.id)
-            # Cache the note immediately after creation
             cached_notes = RedisUtils.get(cache_key) or []
-            # Append the newly created note to the cached notes
             cached_notes.append(NoteSerializer(note).data)  # Serialize the newly created note
-            
-            # Save the updated notes list back to the cache
             RedisUtils.save(cache_key, cached_notes)
 
 
@@ -161,7 +162,10 @@ class NoteViewSet(ViewSet):
             note = Note.objects.get(pk=pk, user=request.user)
             serializer = NoteSerializer(note, data=request.data, partial=True)
             if serializer.is_valid():
-                serializer.save()
+                note = serializer.save()
+
+                if note.reminder:
+                    schedule_reminder(note)
 
                 cache_key = RedisUtils.get_cache_key(request.user.id)
                 cached_notes = RedisUtils.get(cache_key) or []
