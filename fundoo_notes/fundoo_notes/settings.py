@@ -54,6 +54,7 @@ INSTALLED_APPS = [
     'labels',
 
     'django_celery_results',
+    'django_celery_beat',
 ]
 
 MIDDLEWARE = [
@@ -215,3 +216,6 @@ CELERY_ACCEPT_CONTENT = ['application/json']
 CELERY_RESULT_SERIALIZER = os.getenv('CELERY_RESULT_SERIALIZER') 
 CELERY_TASK_SERIALIZER = os.getenv('CELERY_TASK_SERIALIZER')
 CELERY_TIMEZONE = os.getenv('CELERY_TIMEZONE')
+
+# CELERY BEAT SETTINGS
+CELERY_BEAT_SCHEDULER = 'django_celery_beat.schedulers.DatabaseScheduler'
