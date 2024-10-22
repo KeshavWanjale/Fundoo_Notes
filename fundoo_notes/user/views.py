@@ -13,6 +13,10 @@ from .tasks import send_verification_mail
 
 from rest_framework.permissions import AllowAny
 
+from drf_yasg.utils import swagger_auto_schema
+from drf_yasg import openapi
+
+   
 @api_view(['GET'])
 @permission_classes([AllowAny]) # Allow unauthenticated access
 def verify_registered_user(request, token):
@@ -40,13 +44,10 @@ def verify_registered_user(request, token):
         if not user.is_verified:
             user.is_verified = True
             user.save()
-
-        print(user)
-
         return Response({"message": "User verification successful", "status": "success"}, status=status.HTTP_200_OK)
-
     except:
         return Response({"message": "Invalid or expired token", "status": "error"}, status=status.HTTP_400_BAD_REQUEST)
+    
     
 
 class RegisterUser(APIView):
@@ -65,21 +66,23 @@ class RegisterUser(APIView):
               other errors. Status code 400.
     """
     permission_classes = [AllowAny]  # Allow unauthenticated access
+
+    @swagger_auto_schema(
+        operation_description="API to register a new user and send a verification email.",
+        request_body=UserRegistrationSerializer
+    )
     def post(self,request):
 
         serializer = UserRegistrationSerializer(data=request.data)
         if serializer.is_valid():
             user = serializer.save()
-
             # create token
             refresh = RefreshToken.for_user(user)
             token = str(refresh.access_token)
-
             # Create verifiaction url using reverse
             verification_url = request.build_absolute_uri(
                 reverse('verify_user',kwargs={'token': token})
             )
-
             # send verification mail
             subject = 'Verify your account'
             message = f'Hi {user.username},\n\nPlease verify your account using the link below:\n{verification_url}'
@@ -95,7 +98,6 @@ class RegisterUser(APIView):
         
         return Response({"message": "Unexpected error occured", "status": "error", "error": serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
     
-
 
 class LoginUser(APIView):
     """
@@ -115,6 +117,11 @@ class LoginUser(APIView):
               or validation errors.
     """
     permission_classes = [AllowAny]  # Allow unauthenticated access
+
+    @swagger_auto_schema(
+        operation_description="API to authenticate a user and return JWT tokens (access and refresh).",
+        request_body=UserLoginSerializer
+    )
     def post(self,request):
 
         serializer = UserLoginSerializer(data=request.data)

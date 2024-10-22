@@ -13,6 +13,8 @@ from notes.utils.redis_utils import RedisUtils
 
 from .schedule import schedule_reminder
 
+from drf_yasg.utils import swagger_auto_schema
+
 
 class NoteViewSet(ViewSet):
     """
@@ -47,11 +49,14 @@ class NoteViewSet(ViewSet):
             cached_notes = RedisUtils.get(cache_key)
 
             if cached_notes:
+                filtered_cached_notes = [
+                note for note in cached_notes if not note.get('is_archive') and not note.get('is_trash')
+                ]
                 logger.info("Returning notes from cache.")
                 return Response({
                     "message": "Successfully fetched notes for user from cache.",
                     "status": "success", 
-                    "data": cached_notes
+                    "data": filtered_cached_notes
                 }, status=status.HTTP_200_OK)
 
             notes = Note.objects.filter(user=request.user, is_archive=False, is_trash=False)
@@ -71,7 +76,11 @@ class NoteViewSet(ViewSet):
                 "status": "error", 
                 "error": str(e)
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
+        
+    @swagger_auto_schema(
+        operation_description="Create a new note for the authenticated user.",
+        request_body=NoteSerializer
+    )
     def create(self, request):
         """
         Description:
@@ -117,7 +126,9 @@ class NoteViewSet(ViewSet):
                 "status": "error", 
                 "error": serializer.errors
             }, status=status.HTTP_400_BAD_REQUEST)
+        
 
+      
     def retrieve(self, request, pk=None):
         """
         Description:
@@ -146,7 +157,11 @@ class NoteViewSet(ViewSet):
                 "status": "error", 
                 "error": str(e)
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
+        
+    @swagger_auto_schema(
+        operation_description="Update an existing note by its ID for the authenticated user.",
+        request_body=NoteSerializer
+    )
     def update(self, request, pk=None):
         """
         Description:
@@ -218,15 +233,12 @@ class NoteViewSet(ViewSet):
 
             cache_key = RedisUtils.get_cache_key(request.user.id)
             cached_notes = RedisUtils.get(cache_key) or []
-            
             # Filter out the deleted note from the cached notes
             cached_notes = [n for n in cached_notes if n['id'] != note_id]
-
             # Save the updated cache
             RedisUtils.save(cache_key, cached_notes)
 
             logger.info("Note deleted successfully and cache updated.")
-
             return Response({
                 "message": "Note deleted successfully.",
                 "status": "success"
@@ -239,6 +251,8 @@ class NoteViewSet(ViewSet):
                 "status": "error",
                 "error": str(e)
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    
+
     
     # Custom actions
 
@@ -258,7 +272,16 @@ class NoteViewSet(ViewSet):
             note.is_archive = not note.is_archive
             note.save()
 
-            logger.info("Successfully toggled archive status.")
+            cache_key = RedisUtils.get_cache_key(request.user.id)
+            cached_notes = RedisUtils.get(cache_key) or []
+            for cached_note in cached_notes:
+                if cached_note['id'] == note.id:
+                    cached_note['is_archive'] = note.is_archive
+                    break
+            RedisUtils.save(cache_key, cached_notes)
+
+            logger.info("Successfully toggled archive status and updated cache.")
+
             return Response({
                 "message": "Successfully toggled archive status.",
                 "status": "success",
@@ -325,7 +348,15 @@ class NoteViewSet(ViewSet):
             note.is_trash = not note.is_trash
             note.save()
 
-            logger.info("Successfully toggled trash status.")
+            cache_key = RedisUtils.get_cache_key(request.user.id)
+            cached_notes = RedisUtils.get(cache_key) or []
+            for cached_note in cached_notes:
+                if cached_note['id'] == note.id:
+                    cached_note['is_trash'] = note.is_trash
+                    break
+            RedisUtils.save(cache_key, cached_notes)
+
+            logger.info("Successfully toggled trash status and updated the cache")
             return Response({
                 "message": "Successfully toggled trash status.",
                 "status": "success",

@@ -1,9 +1,9 @@
-from .models import Lable
+from .models import Label
 from rest_framework import serializers
 
 
 class LabelSerializer(serializers.ModelSerializer):
     class Meta:
-        model = Lable
+        model = Label
         fields = ['id', 'name', 'color', 'user']
         read_only_fields = ['user'] 

@@ -55,6 +55,8 @@ INSTALLED_APPS = [
 
     'django_celery_results',
     'django_celery_beat',
+
+    'drf_yasg',
 ]
 
 MIDDLEWARE = [
@@ -219,3 +221,15 @@ CELERY_TIMEZONE = os.getenv('CELERY_TIMEZONE')
 
 # CELERY BEAT SETTINGS
 CELERY_BEAT_SCHEDULER = 'django_celery_beat.schedulers.DatabaseScheduler'
+
+
+SWAGGER_SETTINGS = {
+   'SECURITY_DEFINITIONS': {
+      'Bearer': {
+            'type': 'apiKey',
+            'name': 'Authorization',
+            'in': 'header'
+      },
+   },
+   'USE_SESSION_AUTH': False
+}
