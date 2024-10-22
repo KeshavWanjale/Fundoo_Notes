@@ -38,6 +38,6 @@ urlpatterns = [
     path('admin/', admin.site.urls),
     path('api/user/', include('user.urls')),
     path('api/notes/', include('notes.urls')),
-    path('api/', include('labels.urls')),
+    path('api/labels/', include('labels.urls')),
     path('swagger/', schema_view.with_ui('swagger', cache_timeout=0), name='schema-swagger-ui'),
 ]
