@@ -67,7 +67,7 @@ class NoteViewSet(ViewSet):
                 Q(user=request.user) | Q(collaborators=request.user),
                 is_archive=False,
                 is_trash=False
-            )
+            ).distinct()
             serializer = NoteSerializer(notes, many=True)
             RedisUtils.save(cache_key, serializer.data)  # Cache the notes data
             logger.info("Successfully fetched notes from DB and saved to cache.")
@@ -625,12 +625,47 @@ class NoteViewSet(ViewSet):
             note = Note.objects.get(pk=note_id, user=request.user)
             labels = Label.objects.filter(id__in=label_ids)
             note.labels.add(*labels)
+
+            # cache_key = RedisUtils.get_cache_key(request.user.id)
+            # cached_notes = RedisUtils.get(cache_key)
+            
+            # if cached_notes:
+            #     for cached_note in cached_notes:
+            #         if cached_note['id'] == note_id:
+            #             cached_note['labels'] = [label.id for label in note.labels.all()]
+            #             RedisUtils.save(cache_key, cached_notes)
+            #             logger.info(f"Cache updated for note_id {note_id} after adding labels.")
+            #             break
+
+            # Collect all user IDs that need cache updates
+            collaborators = note.collaborators.values_list('id', flat=True)
+            user_ids_to_update = [request.user.id] + list(collaborators)
+
+            # Prepare updated label list once to avoid recalculating it
+            updated_labels = [label.id for label in note.labels.all()]
+
+            # Update each user's cache for this note
+            for user_id in user_ids_to_update:
+                cache_key = RedisUtils.get_cache_key(user_id)
+                cached_notes = RedisUtils.get(cache_key)
+
+                if cached_notes:
+                    # Find the note and update its labels
+                    for cached_note in cached_notes:
+                        if cached_note['id'] == note_id:
+                            cached_note['labels'] = updated_labels
+                            RedisUtils.save(cache_key, cached_notes)
+                            logger.info(f"Cache updated for user_id {user_id} on note_id {note_id} after modifying labels.")
+                            break
+            
+            logger.info("Labels added successfully")
             return Response(
                 {'message': 'Labels added successfully', 'status': 'success'},
                 status=status.HTTP_200_OK
             )
 
         except Note.DoesNotExist:
+            logger.error("The requested note does not exist")
             return Response(
                 {'message': 'Note not found', 'status': 'error', 'errors': 'The requested note does not exist.'},
                 status=status.HTTP_404_NOT_FOUND
@@ -676,6 +711,38 @@ class NoteViewSet(ViewSet):
             labels = Label.objects.filter(id__in=label_ids)
             note.labels.remove(*labels)
 
+            # cache_key = RedisUtils.get_cache_key(request.user.id)
+            # cached_notes = RedisUtils.get(cache_key)
+            
+            # if cached_notes:
+            #     for cached_note in cached_notes:
+            #         if cached_note['id'] == note_id:
+            #             cached_note['labels'] = [label.id for label in note.labels.all()]
+            #             RedisUtils.save(cache_key, cached_notes)
+            #             logger.info(f"Cache updated for note_id {note_id} after removing labels.")
+            #             break
+
+            # Collect all user IDs that need cache updates
+            collaborators = note.collaborators.values_list('id', flat=True)
+            user_ids_to_update = [request.user.id] + list(collaborators)
+
+            # Prepare updated label list once to avoid recalculating it
+            updated_labels = [label.id for label in note.labels.all()]
+
+            # Update each user's cache for this note
+            for user_id in user_ids_to_update:
+                cache_key = RedisUtils.get_cache_key(user_id)
+                cached_notes = RedisUtils.get(cache_key)
+
+                if cached_notes:
+                    # Find the note and update its labels
+                    for cached_note in cached_notes:
+                        if cached_note['id'] == note_id:
+                            cached_note['labels'] = updated_labels
+                            RedisUtils.save(cache_key, cached_notes)
+                            logger.info(f"Cache updated for user_id {user_id} on note_id {note_id} after modifying labels.")
+                            break
+                        
             logger.info("Labels removed successfully")
             return Response(
                 {'message': 'Labels removed successfully', 'status': 'success'},
@@ -683,7 +750,7 @@ class NoteViewSet(ViewSet):
             )
         
         except Note.DoesNotExist:
-            logger.error('Note not found: The requested note does not exist.')
+            logger.error('The requested note does not exist.')
             return Response(
                 {'message': 'Note not found', 'status': 'error', 'errors': 'The requested note does not exist.'},
                 status=status.HTTP_404_NOT_FOUND
