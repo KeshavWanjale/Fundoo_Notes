@@ -13,6 +13,9 @@ from django.core.exceptions import ObjectDoesNotExist
 from rest_framework.exceptions import ValidationError
 from django.db import DatabaseError
 
+from django.db import connection
+
+
 
 class LabelViewSet(GenericAPIView, ListModelMixin, CreateModelMixin):
     """
@@ -179,6 +182,143 @@ class LabelViewSetByID(GenericAPIView, UpdateModelMixin, DestroyModelMixin):
             }, status=status.HTTP_404_NOT_FOUND)
         except DatabaseError as e:
             logger.error(f"Database error while deleting label: {e}")
+            return Response({
+                "message": "An error occurred while deleting the label.",
+                "status": "error"
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+
+class RawSQLLabelView(GenericAPIView):
+    permission_classes = [IsAuthenticated]
+    authentication_classes = [JWTAuthentication]
+    serializer_class = LabelSerializer
+
+    def get(self, request, *args, **kwargs):
+        """
+        Fetch all labels for the authenticated user using raw SQL.
+        """
+        try:
+            
+            user_id = request.user.id
+            query = "SELECT * FROM labels_label WHERE user_id = %s"
+            labels = Label.objects.raw(query, [user_id])
+
+            label_data = LabelSerializer(labels,many=True)
+
+            return Response({
+                "message": "Successfully fetched labels.",
+                "status": "success",
+                "data": label_data.data
+            }, status=status.HTTP_200_OK)
+        
+        except Exception as e:
+            logger.error(f"Error fetching labels: {e}")
+            return Response({
+                "message": "An error occurred while fetching labels.",
+                "status": "error"
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    @swagger_auto_schema(request_body=LabelSerializer)
+    def post(self, request, *args, **kwargs):
+        """
+        Create a new label using raw SQL.
+        """
+        try:
+            name = request.data.get("name")
+            color = request.data.get("color", None)
+            user_id = request.user.id
+
+            if not name:
+                raise ValidationError("Label name is required.")
+            
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    "INSERT INTO labels_label (name, color, user_id) VALUES (%s, %s, %s) RETURNING *",
+                    [name, color, user_id]
+                )
+                updated_label = cursor.fetchone()
+            
+            return Response({
+                "message": "Label created successfully.",
+                "status": "success",
+                "data": {"id": updated_label[0], "name": updated_label[1], "color": updated_label[2], "user": updated_label[3]}
+            }, status=status.HTTP_201_CREATED)
+        
+        except ValidationError as e:
+            logger.error(f"Validation error: {e}")
+            return Response({
+                "message": "Invalid data provided.",
+                "status": "error",
+                "errors": str(e)
+            }, status=status.HTTP_400_BAD_REQUEST)
+        except Exception as e:
+            logger.error(f"Error creating label: {e}")
+            return Response({
+                "message": "An error occurred while creating the label.",
+                "status": "error"
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class RawSQLLabelViewByID(GenericAPIView):
+    
+    permission_classes = [IsAuthenticated]
+    authentication_classes = [JWTAuthentication]
+    serializer_class = LabelSerializer
+
+    def get_queryset(self):
+        # Prevent errors during schema generation
+        if getattr(self, 'swagger_fake_view', False):
+            return Label.objects.none()
+        return super().get_queryset()  # if needed otherwise just return None
+
+    def put(self, request, *args, **kwargs):
+        """
+        Update a label by ID using raw SQL.
+        """
+        try:
+            label_id = kwargs.get("pk")
+            name = request.data.get("name")
+            color = request.data.get("color")
+            user_id = request.user.id
+
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    "UPDATE labels_label SET name = %s, color = %s WHERE id = %s AND user_id = %s",
+                    [name, color, label_id, user_id]
+                )
+            
+            return Response({
+                "message": "Label updated successfully.",
+                "status": "success",
+                "data": {"id": label_id, "name": name, "color": color, "user": user_id}
+            }, status=status.HTTP_200_OK)
+        
+        except Exception as e:
+            logger.error(f"Error updating label: {e}")
+            return Response({
+                "message": "An error occurred while updating the label.",
+                "status": "error"
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        
+    def delete(self, request, *args, **kwargs):
+        """
+        Delete a label by ID using raw SQL.
+        """
+        try:
+            label_id = kwargs.get("pk")
+            user_id = request.user.id
+
+            with connection.cursor() as cursor:
+                cursor.execute("DELETE FROM labels_label WHERE id = %s AND user_id = %s", [label_id, user_id])
+            
+            return Response({
+                "message": "Label deleted successfully.",
+                "status": "success"
+            }, status=status.HTTP_200_OK)
+        
+        except Exception as e:
+            logger.error(f"Error deleting label: {e}")
             return Response({
                 "message": "An error occurred while deleting the label.",
                 "status": "error"
