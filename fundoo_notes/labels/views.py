@@ -9,6 +9,9 @@ from rest_framework import status
 from loguru import logger
 from drf_yasg.utils import swagger_auto_schema
 from drf_yasg import openapi
+from django.core.exceptions import ObjectDoesNotExist
+from rest_framework.exceptions import ValidationError
+from django.db import DatabaseError
 
 
 class LabelViewSet(GenericAPIView, ListModelMixin, CreateModelMixin):
@@ -38,12 +41,20 @@ class LabelViewSet(GenericAPIView, ListModelMixin, CreateModelMixin):
         Returns:
             Response: A response containing the list of labels and a success message.
         """
-        response = super().list(request, *args, **kwargs)
-        return Response({
-            "message": "Successfully fetched labels.",
-            "status": "success",
-            "data": response.data
-        }, status=status.HTTP_200_OK)
+        try:
+            response = super().list(request, *args, **kwargs)
+            logger.info("Successfully fetched labels")
+            return Response({
+                "message": "Successfully fetched labels.",
+                "status": "success",
+                "data": response.data
+            }, status=status.HTTP_200_OK)
+        except DatabaseError as e:
+            logger.error(f"Database error while fetching labels: {e}")
+            return Response({
+                "message": "An error occurred while fetching labels.",
+                "status": "error"
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     @swagger_auto_schema(
         operation_description="Create a new label.",
@@ -58,14 +69,29 @@ class LabelViewSet(GenericAPIView, ListModelMixin, CreateModelMixin):
         Returns:
             Response: A response with the created label data and a success message.
         """
-        serializer = self.get_serializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        serializer.save(user=request.user)
-        return Response({
-            "message": "Label created successfully.",
-            "status": "success",
-            "data": serializer.data
-        }, status=status.HTTP_201_CREATED)
+        try:
+            serializer = self.get_serializer(data=request.data)
+            serializer.is_valid(raise_exception=True)
+            serializer.save(user=request.user)
+            logger.info("Label created successfully.")
+            return Response({
+                "message": "Label created successfully.",
+                "status": "success",
+                "data": serializer.data
+            }, status=status.HTTP_201_CREATED)
+        except ValidationError as e:
+            logger.error(f"Validation error while creating label: {e}")
+            return Response({
+                "message": "Invalid data provided.",
+                "status": "error",
+                "errors": e.detail
+            }, status=status.HTTP_400_BAD_REQUEST)
+        except DatabaseError as e:
+            logger.error(f"Database error while creating label: {e}")
+            return Response({
+                "message": "An error occurred while creating the label.",
+                "status": "error"
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 class LabelViewSetByID(GenericAPIView, UpdateModelMixin, DestroyModelMixin):
@@ -101,12 +127,33 @@ class LabelViewSetByID(GenericAPIView, UpdateModelMixin, DestroyModelMixin):
         Returns:
             Response: A response with the updated label data and a success message.
         """
-        response = super().update(request, *args, **kwargs)
-        return Response({
-            "message": "Label updated successfully.",
-            "status": "success",
-            "data": response.data
-        }, status=status.HTTP_200_OK)
+        try:
+            response = super().update(request, *args, **kwargs)
+            logger.info("Label updated successfully.")
+            return Response({
+                "message": "Label updated successfully.",
+                "status": "success",
+                "data": response.data
+            }, status=status.HTTP_200_OK)
+        except ObjectDoesNotExist:
+            logger.error("Label not found for update.")
+            return Response({
+                "message": "Label not found.",
+                "status": "error"
+            }, status=status.HTTP_404_NOT_FOUND)
+        except ValidationError as e:
+            logger.error(f"Validation error while updating label: {e}")
+            return Response({
+                "message": "Invalid data provided.",
+                "status": "error",
+                "errors": e.detail
+            }, status=status.HTTP_400_BAD_REQUEST)
+        except DatabaseError as e:
+            logger.error(f"Database error while updating label: {e}")
+            return Response({
+                "message": "An error occurred while updating the label.",
+                "status": "error"
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     def delete(self, request, *args, **kwargs):
         """
@@ -117,8 +164,22 @@ class LabelViewSetByID(GenericAPIView, UpdateModelMixin, DestroyModelMixin):
         Returns:
             Response: A response with a success message after the label has been deleted.
         """
-        response = super().destroy(request, *args, **kwargs)
-        return Response({
-            "message": "Label deleted successfully.",
-            "status": "success"
-        }, status=status.HTTP_200_OK)
+        try:
+            response = super().destroy(request, *args, **kwargs)
+            logger.info("Label deleted successfully.")
+            return Response({
+                "message": "Label deleted successfully.",
+                "status": "success"
+            }, status=status.HTTP_200_OK)
+        except ObjectDoesNotExist:
+            logger.error("Label not found for deletion.")
+            return Response({
+                "message": "Label not found.",
+                "status": "error"
+            }, status=status.HTTP_404_NOT_FOUND)
+        except DatabaseError as e:
+            logger.error(f"Database error while deleting label: {e}")
+            return Response({
+                "message": "An error occurred while deleting the label.",
+                "status": "error"
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

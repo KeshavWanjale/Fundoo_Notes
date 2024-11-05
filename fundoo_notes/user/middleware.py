@@ -17,9 +17,6 @@ class RequestLoggingMiddleware:
             # Increment count if the log entry already exists
             log_entry.count = F('count') + 1
             log_entry.save(update_fields=['count'])
-        else:
-            # If a new entry is created, save it with default count = 1
-            log_entry.save()
 
         # Continue processing the request
         response = self.get_response(request)
