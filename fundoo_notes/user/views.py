@@ -5,30 +5,31 @@ from django.contrib.auth import authenticate
 
 from .serializer import *
 from rest_framework_simplejwt.tokens import RefreshToken, AccessToken
-from rest_framework.decorators import api_view, permission_classes
+from rest_framework.decorators import api_view, permission_classes, throttle_classes
 from rest_framework.reverse import reverse
-
 
 from .tasks import send_verification_mail
 
 from rest_framework.permissions import AllowAny
 
 from drf_yasg.utils import swagger_auto_schema
-from drf_yasg import openapi
 
+from rest_framework.throttling import AnonRateThrottle, UserRateThrottle
+
+from django.views import View
+from django.shortcuts import render
    
 @api_view(['GET'])
 @permission_classes([AllowAny]) # Allow unauthenticated access
+@throttle_classes([AnonRateThrottle])
 def verify_registered_user(request, token):
     """
     Description:
         API view to verify a registered user by decoding the provided JWT token. 
         If the token is valid, the user's `is_verified` status is updated.
-
     Parameter:
         request (Request): The request object containing the user's verification token.
         token (str): The JWT token sent to verify the user.
-
     Returns:
         Response:
             - On success: A response with a success message and status code 200 if 
@@ -66,6 +67,7 @@ class RegisterUser(APIView):
               other errors. Status code 400.
     """
     permission_classes = [AllowAny]  # Allow unauthenticated access
+    throttle_classes = [AnonRateThrottle]
 
     @swagger_auto_schema(
         operation_description="API to register a new user and send a verification email.",
@@ -117,6 +119,7 @@ class LoginUser(APIView):
               or validation errors.
     """
     permission_classes = [AllowAny]  # Allow unauthenticated access
+    throttle_classes = [AnonRateThrottle, UserRateThrottle] 
 
     @swagger_auto_schema(
         operation_description="API to authenticate a user and return JWT tokens (access and refresh).",
