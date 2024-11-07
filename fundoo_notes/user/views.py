@@ -1,7 +1,7 @@
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
-from django.contrib.auth import authenticate
+from django.contrib.auth import authenticate, login
 
 from .serializer import *
 from rest_framework_simplejwt.tokens import RefreshToken, AccessToken
@@ -17,7 +17,8 @@ from drf_yasg.utils import swagger_auto_schema
 from rest_framework.throttling import AnonRateThrottle, UserRateThrottle
 
 from django.views import View
-from django.shortcuts import render
+from django.shortcuts import render, redirect
+from django.contrib import messages
    
 @api_view(['GET'])
 @permission_classes([AllowAny]) # Allow unauthenticated access
@@ -146,3 +147,46 @@ class LoginUser(APIView):
             return Response({"message": "Unexpected error occured", "error": "Invalid email or password"}, status=status.HTTP_400_BAD_REQUEST)
         
         return Response({"message": "Unexpected error occured", "status": "error", "error": serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
+    
+class LoginForm(View):
+
+    def get(self, request):
+        return render(request, 'user/login.html')
+
+    def post(self, request):
+        email = request.POST.get('email')
+        password = request.POST.get('password')
+
+        user = authenticate(request, email=email, password=password)
+        if user is not None:
+            login(request, user)
+            return redirect('index_view')
+        else:
+            messages.error(request, "Invalid email or password.")
+            return render(request, 'user/login.html') 
+        
+class RegisterForm(View):
+
+    def get(self, request):
+        return render(request=request,template_name='user/register.html')
+    
+    def post(self, request):
+        serializer = UserRegistrationSerializer(data=request.POST)
+        
+        if serializer.is_valid():
+            serializer.save()
+            messages.success(request, "Registration successful! Please login.")
+            return redirect('login_user')
+        else:
+            messages.error(request, "Registration failed. Please try again.")
+
+        return render(request, 'user/register.html')
+    
+class IndexView(View):
+
+    def get(self, request):
+        if not request.user.is_authenticated:
+            return redirect('login_user')
+        # get- gives single user object, filter- gives queryset with user objects
+        user_details = CustomUser.objects.get(id=request.user.id)
+        return render(request, 'user/index.html', {'user_details': user_details}) 
