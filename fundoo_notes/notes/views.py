@@ -52,7 +52,7 @@ class NoteViewSet(ViewSet):
             cache_key = RedisUtils.get_cache_key(request.user.id)
             cached_notes = RedisUtils.get(cache_key)
 
-            if cached_notes:
+            if cached_notes is not None:
                 filtered_cached_notes = [
                 note for note in cached_notes if not note.get('is_archive') and not note.get('is_trash') or request.user.id in note.get('collaborators')
                 ]
@@ -148,7 +148,9 @@ class NoteViewSet(ViewSet):
             Response: A response with the note data and a success message.
         """
         try:
-            note = Note.objects.get(pk=pk, user=request.user)
+            note = Note.objects.get(
+                Q(pk=pk) & (Q(user=request.user) | Q(collaborators=request.user))
+            )
             serializer = NoteSerializer(note)
 
             logger.info("Successfully fetched a note for user using note id.")
@@ -173,8 +175,8 @@ class NoteViewSet(ViewSet):
     def update(self, request, pk=None):
         """
         Description:
-            Update an existing note for the authenticated user by its primary key (ID). 
-            After updating, the cached note list is updated with the modified note.
+            Update an existing note for the authenticated user or authorized collaborator
+            by its primary key (ID). Checks access type for collaborators.
         Parameters:
             request (Request): The request object containing the updated note data.
             pk (int): The primary key of the note to update.
@@ -182,15 +184,40 @@ class NoteViewSet(ViewSet):
             Response: A response with a success message after updating the note.
         """
         try:
-            note = Note.objects.get(pk=pk, user=request.user)
-            serializer = NoteSerializer(note, data=request.data, partial=True)
+            # Check if the user is the owner of the note
+            note = Note.objects.filter(pk=pk).first()
+
+            if not note:
+                return Response({
+                    "message": "Note not found.",
+                    "status": "error"
+                }, status=status.HTTP_404_NOT_FOUND)
+
+            if note.user == request.user:
+                # Owner can update the note
+                serializer = NoteSerializer(note, data=request.data, partial=True)
+            else:
+                # Check collaborator access type
+                collaborator = Collaborator.objects.filter(
+                    user=request.user,
+                    note=note
+                ).first()
+
+                if not collaborator or collaborator.access_type != Collaborator.READ_WRITE:
+                    return Response({
+                        "message": "You do not have permission to update this note.",
+                        "status": "error"
+                    }, status=status.HTTP_403_FORBIDDEN)
+
+                serializer = NoteSerializer(note, data=request.data, partial=True)
+
             if serializer.is_valid():
                 note = serializer.save()
 
                 if note.reminder:
                     schedule_reminder(note)
 
-                cache_key = RedisUtils.get_cache_key(request.user.id)
+                cache_key = RedisUtils.get_cache_key(note.user.id)
                 cached_notes = RedisUtils.get(cache_key) or []
 
                 for cached_note in cached_notes:
@@ -198,28 +225,28 @@ class NoteViewSet(ViewSet):
                         # Update the note directly in the list
                         cached_note.update(serializer.data)
                         break
-                
+
                 RedisUtils.save(cache_key, cached_notes)  # Update cache with modified notes
 
                 logger.info("Note updated successfully and cache updated.")
                 return Response({
-                    "message": "Note updated successfully.", 
+                    "message": "Note updated successfully.",
                     "status": "success",
-                    "data": serializer.data 
+                    "data": serializer.data
                 }, status=status.HTTP_200_OK)
-            
-            logger.error(f"Unexpected error occurred: {serializer.errors}")
+
+            logger.error(f"Validation error during update: {serializer.errors}")
             return Response({
-                "message": "Unexpected error occurred", 
-                "status": "error", 
+                "message": "Validation error occurred.",
+                "status": "error",
                 "error": serializer.errors
             }, status=status.HTTP_400_BAD_REQUEST)
-        
+
         except Exception as e:
             logger.error(f"Unexpected error occurred: {e}")
             return Response({
-                "message": "Unexpected error occurred", 
-                "status": "error", 
+                "message": "Unexpected error occurred.",
+                "status": "error",
                 "error": str(e)
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
@@ -339,11 +366,17 @@ class NoteViewSet(ViewSet):
                     }, status=status.HTTP_200_OK)
 
             # If no cache or no archived notes in cache, fetch from the database
-            archived_notes = Note.objects.filter(user=request.user, is_archive=True, is_trash=False)
+            archived_notes = Note.objects.filter(Q(user=request.user) | Q(collaborators=request.user), is_archive=True, is_trash=False)
             serializer = NoteSerializer(archived_notes, many=True)
-            
-            # Update cache with the latest notes data
-            RedisUtils.save(cache_key, serializer.data)
+
+            if cached_notes is None:
+                cached_notes = []
+            else:
+                cached_notes = list(cached_notes)  # Ensure it's a mutable list
+
+            # Combine new archived notes with existing cached notes
+            cached_notes.extend(serializer.data)
+            RedisUtils.save(cache_key, cached_notes)  # Update cache with all notes
 
             logger.info("Successfully fetched archived notes from database and updated cache.")
             return Response({
@@ -359,6 +392,7 @@ class NoteViewSet(ViewSet):
                 "status": "error",
                 "error": str(e)
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
 
     @action(detail=True, methods=['patch'])
     def toggle_trash(self, request, pk=None):
@@ -432,11 +466,21 @@ class NoteViewSet(ViewSet):
                     }, status=status.HTTP_200_OK)
 
             # If no cache or no trashed notes in cache, fetch from the database
-            trashed_notes = Note.objects.filter(user=request.user, is_trash=True)
-            serializer = NoteSerializer(trashed_notes, many=True)
-            
-            # Update cache with the latest notes data
-            RedisUtils.save(cache_key, serializer.data)
+            trashed_notes_queryset = Note.objects.filter(Q(user=request.user) | Q(collaborators=request.user), is_trash=True)
+            serializer = NoteSerializer(trashed_notes_queryset, many=True)
+
+            if cached_notes is None:
+                cached_notes = []
+            else:
+                cached_notes = list(cached_notes)  # Ensure it's a mutable list
+
+            # Combine new trashed notes with existing cached notes
+            new_notes = serializer.data
+            cached_notes.extend(new_notes)
+
+            # Avoid duplicates in the cache
+            unique_notes = {note['id']: note for note in cached_notes}.values()
+            RedisUtils.save(cache_key, list(unique_notes))
 
             logger.info("Successfully fetched trashed notes from database and updated cache.")
             return Response({
@@ -452,6 +496,7 @@ class NoteViewSet(ViewSet):
                 "status": "error",
                 "error": str(e)
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
         
     @swagger_auto_schema(
         operation_description="Add collaborator.",
